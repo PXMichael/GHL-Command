@@ -1,0 +1,34 @@
+name: ghl-command
+label: GHL Command
+kind: standalone
+version: "0.1.0"
+author: PXMichael
+homepage: https://github.com/PXMichael/ghl-command
+license: MIT
+description: "GoHighLevel lives inside Hermes. Create contacts, move deals, send email and SMS, trigger workflows from chat. Live in 90 seconds, no browser clicks."
+requires_hermes: ">=0.19"
+platforms: []
+provides_tools:
+  - ghl_list_contacts
+  - ghl_search_contacts
+  - ghl_create_contact
+  - ghl_update_contact
+  - ghl_delete_contact
+  - ghl_send_sms
+  - ghl_send_email
+  - ghl_list_pipelines
+  - ghl_search_opportunities
+  - ghl_move_opportunity
+  - ghl_list_workflows
+  - ghl_enroll_workflow
+provides_hooks: []
+requires_env:
+  - name: GHL_API_KEY
+    description: "GoHighLevel Private Integration Token (pit-...) for your location"
+    prompt: "GoHighLevel Private Integration Token"
+    password: true
+optional_env:
+  - name: GHL_LOCATION_ID
+    description: "Default GHL Location ID (Pursuing X Agency default used if unset)"
+    prompt: "GoHighLevel Location ID"
+    password: false
