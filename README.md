@@ -65,10 +65,10 @@ One subscriber, start to finish, from chat.
 1. `ghl_list_workflows` shows the available workflows.
 2. `ghl_create_contact` creates the subscriber with a tag.
 3. `ghl_enroll_workflow` enrolls them in the sequence.
-4. `ghl_send_email` sends the link.
+4. `ghl_send_email` sends the link, after you approve the prompt.
 5. `ghl_list_pipelines` then `ghl_move_opportunity` shows the deal stage.
 
-All five steps run from chat. No browser clicking.
+All five steps run from chat. No browser clicking. The two that touch a real person (enroll and send) stop for your approval first.
 
 ## Security notes
 
@@ -76,6 +76,8 @@ All five steps run from chat. No browser clicking.
 - The plugin never reads `.env` files, `auth.json`, or browser stores.
 - Writes require a valid token; without `GHL_API_KEY` and `GHL_LOCATION_ID` the tools stay hidden.
 - There is no default location. The plugin never writes to an account the user did not configure.
+- `ghl_delete_contact`, `ghl_send_sms`, `ghl_send_email` and `ghl_enroll_workflow` go through Hermes' approval prompt before they run, so a note or inbound message in your CRM cannot talk the agent into texting your customers.
+- Model-supplied ids are validated against `[A-Za-z0-9_-]` and percent-escaped before they enter a URL path.
 - The plugin sends network calls only to `services.leadconnectorhq.com`.
 
 ## Development

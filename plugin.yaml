@@ -21,7 +21,8 @@ provides_tools:
   - ghl_move_opportunity
   - ghl_list_workflows
   - ghl_enroll_workflow
-provides_hooks: []
+provides_hooks:
+  - pre_tool_call
 requires_env:
   - name: GHL_API_KEY
     description: "GoHighLevel Private Integration Token (pit-...) for your location"

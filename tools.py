@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -26,6 +27,8 @@ from typing import Any, Dict, Optional
 logger = logging.getLogger(__name__)
 
 TOOLSET = "ghl-command"
+PLUGIN_VERSION = "0.1.0"
+USER_AGENT = "ghl-command/" + PLUGIN_VERSION + " (+https://github.com/PXMichael/GHL-Command)"
 GHL_BASE = "https://services.leadconnectorhq.com"
 LOCATION_HELP = (
     "GHL_LOCATION_ID is not set. Add your GoHighLevel Location ID via Hermes "
@@ -58,7 +61,7 @@ def _get_headers(token: str) -> Dict[str, str]:
         "Content-Type": "application/json",
         "Version": "2021-07-28",
         "Accept": "application/json",
-        "User-Agent": "curl/8.5.0",
+        "User-Agent": USER_AGENT,
     }
 
 
@@ -152,6 +155,77 @@ def _check_ghl_available() -> bool:
         return False
 
 
+# --- Approval gate -------------------------------------------------------
+
+# These four reach outside the conversation: they delete a record or put a
+# message in front of a real person. A CRM is full of text other people wrote
+# (notes, inbound messages, form answers), so any of it can carry instructions
+# aimed at the model. They run only after Hermes' approval prompt.
+APPROVAL_TOOLS = {
+    "ghl_delete_contact",
+    "ghl_send_sms",
+    "ghl_send_email",
+    "ghl_enroll_workflow",
+}
+
+_ID_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+def _safe_id(value: Any, field: str) -> str:
+    """Validate and escape a model-supplied id before it enters a URL path.
+
+    An id carrying '/', '?', '#' or '..' can retarget the request at a
+    different endpoint while still presenting the same token, so ids are held
+    to a strict charset and percent-escaped as well.
+    """
+    text = str(value if value is not None else "").strip()
+    if not text or not _ID_RE.match(text):
+        raise ValueError(
+            "Invalid " + field + ": expected [A-Za-z0-9_-] only, got " + repr(text[:40])
+        )
+    return urllib.parse.quote(text, safe="")
+
+
+def _approval_preview(tool_name: str, args: dict) -> str:
+    """One line naming exactly what is about to happen, for the prompt."""
+    def s(key: str) -> str:
+        v = args.get(key)
+        return str(v) if v not in (None, "") else ""
+
+    if tool_name == "ghl_delete_contact":
+        return "delete contact " + (s("contact_id") or s("contactId"))
+    if tool_name == "ghl_send_sms":
+        who = s("contact_id") or s("contactId") or s("phone") or s("to")
+        return "text " + who + ": " + (s("message") or s("body"))[:120]
+    if tool_name == "ghl_send_email":
+        who = s("contact_id") or s("contactId") or s("email") or s("to")
+        return "email " + who + ": " + (s("subject") or "Message from Hermes")
+    if tool_name == "ghl_enroll_workflow":
+        return ("enroll contact " + (s("contact_id") or s("contactId"))
+                + " in workflow " + (s("workflow_id") or s("workflowId")))
+    return tool_name
+
+
+def pre_tool_call(tool_name: str = "", args=None, **kwargs):
+    """Hold the outbound and destructive calls for a human yes.
+
+    Returns None for everything else, so the other eight tools run normally.
+    """
+    if tool_name not in APPROVAL_TOOLS:
+        return None
+    args = args if isinstance(args, dict) else {}
+    try:
+        detail = _approval_preview(tool_name, args)
+    except Exception:
+        detail = "requested action"
+    return {
+        "action": "approve",
+        "message": tool_name + ": " + detail,
+        "rule_key": "ghl-command:" + tool_name,
+    }
+
+
+
 # --- Handlers ---
 
 def _handle_list_contacts(args: dict, **kw) -> str:
@@ -214,7 +288,8 @@ def _handle_update_contact(args: dict, **kw) -> str:
         if not body:
             return {"error": "No fields to update", "contact_id": contact_id}
         # IMPORTANT: contact update must NOT include locationId (returns 422)
-        res = _api("PUT", f"/contacts/{contact_id}", body=body)
+        cid = _safe_id(contact_id, "contact_id")
+        res = _api("PUT", f"/contacts/{cid}", body=body)
         contact = res.get("contact") or res
         return {"contact_id": contact_id, "contact": _compact_contact(contact) if isinstance(contact, dict) else contact}
     return _dispatch(run, "ghl_update_contact", "Failed to update contact")
@@ -226,7 +301,8 @@ def _handle_delete_contact(args: dict, **kw) -> str:
         return tool_error("Missing required parameter: contact_id")
     loc = _resolve_location(args)
     def run():
-        res = _api("DELETE", f"/contacts/{contact_id}", location_id=loc)
+        cid = _safe_id(contact_id, "contact_id")
+        res = _api("DELETE", f"/contacts/{cid}", location_id=loc)
         return {"contact_id": contact_id, "location_id": loc, "result": res}
     return _dispatch(run, "ghl_delete_contact", "Failed to delete contact")
 
@@ -314,7 +390,8 @@ def _handle_move_opportunity(args: dict, **kw) -> str:
             body["status"] = args["status"]
         if not body:
             return {"error": "Provide stage_id or status", "opportunity_id": opp_id}
-        res = _api("PUT", f"/opportunities/{opp_id}", body=body)
+        oid = _safe_id(opp_id, "opportunity_id")
+        res = _api("PUT", f"/opportunities/{oid}", body=body)
         return {"opportunity_id": opp_id, "result": res}
     return _dispatch(run, "ghl_move_opportunity", "Failed to move opportunity")
 
@@ -339,7 +416,9 @@ def _handle_enroll_workflow(args: dict, **kw) -> str:
         return tool_error("Missing required parameters: contact_id and workflow_id")
     def run():
         # Exact singular endpoint: POST /contacts/{contactId}/workflow/{workflowId} with {}
-        res = _api("POST", f"/contacts/{contact_id}/workflow/{workflow_id}", body={})
+        cid = _safe_id(contact_id, "contact_id")
+        wid = _safe_id(workflow_id, "workflow_id")
+        res = _api("POST", f"/contacts/{cid}/workflow/{wid}", body={})
         return {"contact_id": contact_id, "workflow_id": workflow_id, "result": res}
     return _dispatch(run, "ghl_enroll_workflow", "Failed to enroll in workflow")
 
@@ -538,7 +617,8 @@ TOOLS = (
 
 
 def register_tools(ctx) -> None:
-    """Register all GoHighLevel tools in the ghl-command toolset via the plugin API."""
+    """Register the ghl-command tools and the approval hook via the plugin API."""
+    ctx.register_hook("pre_tool_call", pre_tool_call)
     for schema, handler in TOOLS:
         ctx.register_tool(
             name=schema["name"],
