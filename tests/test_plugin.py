@@ -1,4 +1,4 @@
-"""Tests for px-ghl-bridge plugin registration."""
+"""Tests for the ghl-command plugin registration."""
 
 import sys
 from pathlib import Path
@@ -34,10 +34,12 @@ def test_registers_12_tools():
     }
     assert set(registered) == expected
 
-def test_default_location_constant():
+def test_no_hardcoded_location():
+    """A public plugin must never ship a default location id."""
     plugin_dir = Path(__file__).resolve().parent.parent
     tools_src = (plugin_dir / "tools.py").read_text(encoding="utf-8")
-    assert "NvqL18HRoYJ29fAGdWSH" in tools_src
+    assert "NvqL18HRoYJ29fAGdWSH" not in tools_src
+    assert "DEFAULT_LOCATION" not in tools_src
     assert "services.leadconnectorhq.com" in tools_src
 
 def test_skill_host_rule():

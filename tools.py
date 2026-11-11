@@ -8,8 +8,10 @@ Private Integration Tokens) with Version header 2021-07-28. Auth goes
 through Hermes secrets via agent.secret_scope.get_secret, never os.environ
 directly, so profile multiplexing is respected (catalog rule 11).
 
-Default location falls back to the configured GHL_LOCATION_ID unless
-GHL_LOCATION_ID is set or a location_id argument is passed.
+There is no baked-in default location. A public plugin must never target the
+author's own account, so both GHL_API_KEY and GHL_LOCATION_ID are required and
+a missing one fails with a clear message instead of writing somewhere the user
+did not choose.
 """
 
 from __future__ import annotations
@@ -25,7 +27,10 @@ logger = logging.getLogger(__name__)
 
 TOOLSET = "ghl-command"
 GHL_BASE = "https://services.leadconnectorhq.com"
-DEFAULT_LOCATION = "NvqL18HRoYJ29fAGdWSH"
+LOCATION_HELP = (
+    "GHL_LOCATION_ID is not set. Add your GoHighLevel Location ID via Hermes "
+    "secrets. Find it in the GHL URL bar inside the sub-account."
+)
 
 
 def tool_error(message: str) -> str:
@@ -36,14 +41,14 @@ def tool_error(message: str) -> str:
 def _get_config() -> tuple[str, str]:
     """Return (token, location) via Hermes secret scope.
 
-    Falls back to DEFAULT_LOCATION when GHL_LOCATION_ID is unset.
+    Both values are required. There is no default location, so an unset
+    GHL_LOCATION_ID fails loudly rather than targeting an account the user
+    never chose.
     """
     from agent.secret_scope import get_secret
 
     token = get_secret("GHL_API_KEY", "") or ""
     location = get_secret("GHL_LOCATION_ID", "") or ""
-    if not location:
-        location = DEFAULT_LOCATION
     return token, location
 
 
@@ -72,6 +77,8 @@ def _api(
             "GHL_API_KEY is not set. Add it via Hermes secrets. " "Private Integration Token (pit-...) is required."
         )
     loc = location_id or default_loc
+    if not loc:
+        raise RuntimeError(LOCATION_HELP)
     url = GHL_BASE + path
     # Always include locationId as query for list endpoints when not in body
     params = dict(query or {})
@@ -137,10 +144,10 @@ def _dispatch(fn, log_name: str, fail_msg: str) -> str:
 
 
 def _check_ghl_available() -> bool:
-    """Tool is only available when token is set."""
+    """Tool is only available when both the token and the location are set."""
     try:
-        token, _ = _get_config()
-        return bool(token)
+        token, location = _get_config()
+        return bool(token and location)
     except Exception:
         return False
 
@@ -246,7 +253,7 @@ def _handle_send_sms(args: dict, **kw) -> str:
 def _handle_send_email(args: dict, **kw) -> str:
     contact_id = args.get("contact_id") or args.get("contactId")
     email = args.get("email") or args.get("to")
-    subject = args.get("subject") or "Message from Pursuing X"
+    subject = args.get("subject") or "Message from Hermes"
     html = args.get("html") or args.get("htmlBody") or args.get("body") or args.get("message")
     if not html:
         return tool_error("Missing required parameter: html (email body)")
@@ -341,11 +348,11 @@ def _handle_enroll_workflow(args: dict, **kw) -> str:
 
 GHL_LIST_CONTACTS_SCHEMA = {
     "name": "ghl_list_contacts",
-    "description": "List GoHighLevel contacts for a location. Uses location_id or the configured default (Pursuing X Agency).",
+    "description": "List GoHighLevel contacts for a location.",
     "parameters": {
         "type": "object",
         "properties": {
-            "location_id": {"type": "string", "description": "Optional location ID. Defaults to PX Agency."},
+            "location_id": {"type": "string", "description": "Optional location ID. Defaults to GHL_LOCATION_ID from Hermes secrets."},
             "limit": {"type": "integer", "description": "How many to return. Default 20."},
             "page": {"type": "integer", "description": "Page number. Default 1."},
         },
@@ -531,7 +538,7 @@ TOOLS = (
 
 
 def register_tools(ctx) -> None:
-    """Register all GoHighLevel tools in the px-ghl-bridge toolset via the plugin API."""
+    """Register all GoHighLevel tools in the ghl-command toolset via the plugin API."""
     for schema, handler in TOOLS:
         ctx.register_tool(
             name=schema["name"],

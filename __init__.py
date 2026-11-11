@@ -8,15 +8,18 @@ from __future__ import annotations
 
 import logging
 
-from .tools import register_tools, TOOLSET
+try:  # package import (Hermes loader)
+    from .tools import register_tools, TOOLSET
+except ImportError:  # file import (pytest collection)
+    from tools import register_tools, TOOLSET
 
 logger = logging.getLogger(__name__)
 
 
 def register(ctx) -> None:
-    """Plugin entry point — called by the Hermes plugin loader."""
+    """Plugin entry point, called by the Hermes plugin loader."""
     register_tools(ctx)
-    logger.info("px-ghl-bridge: registered 12 GHL tools in toolset %s", TOOLSET)
+    logger.info("ghl-command: registered 12 GHL tools in toolset %s", TOOLSET)
 
 
 __all__ = ["register", "register_tools", "TOOLSET"]

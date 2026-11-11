@@ -27,8 +27,7 @@ requires_env:
     description: "GoHighLevel Private Integration Token (pit-...) for your location"
     prompt: "GoHighLevel Private Integration Token"
     password: true
-optional_env:
   - name: GHL_LOCATION_ID
-    description: "Default GHL Location ID (Pursuing X Agency default used if unset)"
+    description: "Your GoHighLevel Location ID. Find it in the GHL URL bar inside the sub-account."
     prompt: "GoHighLevel Location ID"
     password: false

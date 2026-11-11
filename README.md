@@ -2,7 +2,7 @@
 
 GoHighLevel lives inside Hermes. Create contacts, move deals, send email and SMS, trigger workflows from chat. Live in 90 seconds, no browser clicks.
 
-Default location is Pursuing X Agency `NvqL18HRoYJ29fAGdWSH`. Set `GHL_LOCATION_ID` to override.
+You supply your own GoHighLevel Location ID. The plugin ships no default location and never targets an account you did not configure.
 
 ## What it does
 
@@ -48,7 +48,7 @@ hermes plugins install ghl-command
    - `locations.readonly`
    - `workflows.readonly`
 4. Save the token. Add it through Hermes secrets as `GHL_API_KEY`.
-5. Add your Location ID as `GHL_LOCATION_ID` (optional if you use the PX Agency default).
+5. Add your Location ID as `GHL_LOCATION_ID`. Both secrets are required. Without them the tools stay hidden.
 
 In Hermes:
 
@@ -58,14 +58,14 @@ hermes auth add ghl-command:ghl
 
 Then paste the `pit-` token when prompted. Or set `GHL_API_KEY` in your profile `.env` through Hermes secrets so `agent.secret_scope.get_secret("GHL_API_KEY")` can read it.
 
-## Dolan replay demo
+## Demo story
 
-For the Richard Dolan channel, the demo walks one subscriber through sale.
+One subscriber, start to finish, from chat.
 
-1. `ghl_list_workflows` shows the replay sales workflows.
-2. `ghl_create_contact` creates the subscriber with a `dolan replay` tag.
-3. `ghl_enroll_workflow` enrolls them in the replay sequence.
-4. `ghl_send_email` sends the replay link.
+1. `ghl_list_workflows` shows the available workflows.
+2. `ghl_create_contact` creates the subscriber with a tag.
+3. `ghl_enroll_workflow` enrolls them in the sequence.
+4. `ghl_send_email` sends the link.
 5. `ghl_list_pipelines` then `ghl_move_opportunity` shows the deal stage.
 
 All five steps run from chat. No browser clicking.
@@ -74,7 +74,8 @@ All five steps run from chat. No browser clicking.
 
 - Secrets are read via `get_secret`, never `os.environ` directly, so profile multiplexing works.
 - The plugin never reads `.env` files, `auth.json`, or browser stores.
-- Writes require a valid token; without `GHL_API_KEY` the tools stay hidden.
+- Writes require a valid token; without `GHL_API_KEY` and `GHL_LOCATION_ID` the tools stay hidden.
+- There is no default location. The plugin never writes to an account the user did not configure.
 - The plugin sends network calls only to `services.leadconnectorhq.com`.
 
 ## Development
